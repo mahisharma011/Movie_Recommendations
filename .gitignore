@@ -1,8 +1,12 @@
 .streamlit/secrets.toml
+
+
 venv/
 venv311/
 .venv/
 .venv311/
 **/venv/
+**/.venv/
 
 __pycache__/
+*.py[cod]
