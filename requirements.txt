@@ -1,0 +1,14 @@
+fastapi==0.135.0
+uvicorn==0.30.1
+python-dotenv==1.0.1
+httpx==0.27.0
+
+
+numpy==2.1.0
+scipy==1.13.1
+pandas==3.0.0
+scikit-learn==1.9.1
+joblib==1.4.2
+
+#frontend
+streamlit==1.66.0
