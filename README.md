@@ -42,7 +42,6 @@ Movie_Recommendations/
 └── README.md              # Project documentation
 ```
 
-*The structure above lists the main project files; your repository may contain additional files.*
 
 ## 🚀 Getting Started
 
@@ -108,13 +107,6 @@ Run the app, enter *Avengers* in the movie search box, and explore recommendatio
 
 The project uses preprocessed movie data and a saved TF-IDF matrix to generate recommendations. The files `df.pkl` and `tfidf_matrix.pkl` must be available in the expected project directory.
 
-## 🔮 Future Improvements
-
-- Add movie genre and language filters.
-- Improve recommendations using additional movie metadata.
-- Display movie ratings, release dates, and descriptions.
-- Add user profiles and personalized recommendations.
-- Deploy the application for public access.
 
 ## 🎯 Learning Outcomes
 
