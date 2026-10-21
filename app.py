@@ -600,12 +600,31 @@ else:
 # 11. FOOTER
 # ==================================================
 
-st.markdown("""
-<div class="footer">
-    CineMatch · Find your next favourite film
-    <br><br>
-    Movie metadata and posters powered by TMDB.
-    This product uses the TMDB API but is not endorsed
-    or certified by TMDB.
-</div>
-""", unsafe_allow_html=True)
+
+st.markdown(
+    """
+    <style>
+    .footer {
+        text-align: center;
+        padding: 30px 10px 15px;
+        margin-top: 50px;
+        border-top: 1px solid #343444;
+        color: #b8b8cc;
+    }
+    .footer-name {
+        color: #c4b5fd;
+        font-size: 20px;
+        font-weight: 600;
+    }
+    </style>
+
+    <div class="footer">
+        <p>Discover your next favourite movie.</p>
+        <p>Developed with ❤️ by</p>
+        <div class="footer-name">Mahi Sharma</div>
+        <p>© 2026 CineMatch</p>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
