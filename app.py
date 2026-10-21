@@ -1,261 +1,611 @@
 
 import streamlit as st
 import pandas as pd
-import pickle
+import requests
 from sklearn.metrics.pairwise import cosine_similarity
+from html import escape
 
-# ---------------- PAGE CONFIG ----------------
+
+# ==================================================
+# 1. PAGE CONFIGURATION
+# ==================================================
+
 st.set_page_config(
-    page_title="CineMatch | Movie Recommendations",
+    page_title="CineMatch | Movie Recommender",
     page_icon="🎬",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
-# ---------------- CUSTOM CSS ----------------
+
+# ==================================================
+# 2. CUSTOM CSS
+# ==================================================
+
 st.markdown("""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
 .stApp {
-    background: linear-gradient(135deg, #100d12, #21121a);
-    color: #ffffff;
+    background:
+        radial-gradient(circle at 10% 0%, #202044 0%, transparent 35%),
+        linear-gradient(135deg, #080812, #11111f 55%, #090910);
+    color: #f5f5f7;
+    font-family: 'Inter', sans-serif;
 }
+
 .block-container {
     padding-top: 2rem;
-    max-width: 1250px;
+    padding-bottom: 3rem;
+    max-width: 1400px;
 }
+
 h1, h2, h3, p, label {
-    color: #ffffff !important;
+    color: #f5f5f7;
 }
+
 .hero {
-    background: linear-gradient(120deg, #421525, #21121a, #15121c);
-    padding: 35px;
-    border-radius: 20px;
-    border: 1px solid #53303d;
-    margin-bottom: 25px;
+    text-align: center;
+    padding: 2rem 1rem 2.5rem;
 }
+
 .hero h1 {
-    font-size: 42px;
-    margin-bottom: 5px;
+    font-size: clamp(2.5rem, 6vw, 4.5rem);
+    font-weight: 800;
+    letter-spacing: -2px;
+    margin-bottom: 0.4rem;
+    background: linear-gradient(90deg, #ffffff, #c4b5fd, #f0abfc);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
 }
+
 .hero p {
-    color: #d7c4cc !important;
-    font-size: 17px;
+    color: #aaaac3;
+    font-size: 1.1rem;
 }
+
+.section-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-top: 1.5rem;
+    margin-bottom: 0.3rem;
+}
+
+.section-subtitle {
+    color: #aaaac3;
+    margin-bottom: 1.2rem;
+}
+
 .movie-card {
-    background: #241b23;
-    border: 1px solid #45313d;
-    padding: 18px;
-    border-radius: 14px;
-    min-height: 180px;
-    margin-bottom: 15px;
+    background: linear-gradient(145deg, #1c1c31, #131320);
+    border: 1px solid #30304a;
+    border-radius: 16px;
+    padding: 14px;
+    margin-bottom: 14px;
 }
-.movie-card h3 {
-    font-size: 19px;
-    margin-top: 8px;
+
+.movie-title {
+    font-size: 1rem;
+    font-weight: 700;
+    margin: 10px 0 8px;
+    color: #ffffff;
+    overflow-wrap: anywhere;
 }
-.movie-card p {
-    font-size: 13px;
-    color: #d2c4cc !important;
+
+.movie-year {
+    font-size: 0.85rem;
+    color: #aaaac3;
+    margin-bottom: 8px;
 }
-.tag {
-    color: #ff829e;
-    font-size: 12px;
-    font-weight: bold;
-    letter-spacing: 1px;
+
+.movie-overview {
+    font-size: 0.9rem;
+    color: #c3c3d6;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
 }
-.stButton > button {
-    background: #e54868;
-    color: white;
-    border: none;
-    border-radius: 9px;
-    font-weight: bold;
-    min-height: 42px;
+
+div[data-baseweb="select"] > div,
+div[data-baseweb="input"] > div {
+    background-color: #191929;
+    border-color: #393952;
+    border-radius: 10px;
 }
-.stButton > button:hover {
-    background: #c92e51;
-    color: white;
-    border: none;
+
+div[data-testid="stImage"] img {
+    border-radius: 12px;
 }
-div[data-baseweb="select"] > div {
-    background-color: #241b23;
+
+div[data-testid="stAlert"] {
+    border-radius: 12px;
 }
-hr {
-    border-color: #45313d;
+
+.footer {
+    text-align: center;
+    color: #777790;
+    font-size: 0.85rem;
+    padding-top: 3rem;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- LOAD DATA ----------------
+
+# ==================================================
+# 3. HEADER
+# ==================================================
+
+st.markdown("""
+<div class="hero">
+    <h1>🎬 CineMatch</h1>
+    <p>Discover your next favourite movie.</p>
+</div>
+""", unsafe_allow_html=True)
+
+
+# ==================================================
+# 4. LOAD MOVIE DATA
+# ==================================================
+
 @st.cache_resource
 def load_data():
-    with open("df.pkl", "rb") as f:
-        df = pickle.load(f)
+    df = pd.read_pickle("df.pkl")
+    tfidf_matrix = pd.read_pickle("tfidf_matrix.pkl")
 
-    with open("tfidf_matrix.pkl", "rb") as f:
-        tfidf_matrix = pickle.load(f)
+    if "title" not in df.columns:
+        raise ValueError(
+            "Your DataFrame must contain a 'title' column."
+        )
+
+    if len(df) != tfidf_matrix.shape[0]:
+        raise ValueError(
+            "The number of movies and TF-IDF rows do not match. "
+            "Regenerate both pickle files from the same dataset."
+        )
+
+    # Reset index to ensure positions match the TF-IDF rows.
+    df = df.reset_index(drop=True)
 
     return df, tfidf_matrix
 
 
 try:
     df, tfidf_matrix = load_data()
-except Exception as e:
-    st.error("Could not load your movie files.")
-    st.write("Check that df.pkl and tfidf_matrix.pkl are in this folder.")
-    st.code(str(e))
+
+except Exception as error:
+    st.error(f"Unable to load movie data: {error}")
+    st.info(
+        "Ensure df.pkl and tfidf_matrix.pkl exist in the "
+        "same folder as app.py."
+    )
     st.stop()
 
-# ---------------- HERO SECTION ----------------
-st.markdown("""
-<div class="hero">
-    <div class="tag">YOUR PERSONAL MOVIE DISCOVERY PLATFORM</div>
-    <h1>🎬 CineMatch</h1>
-    <p>Not sure what to watch? Discover your next favourite movie.</p>
-</div>
-""", unsafe_allow_html=True)
 
-# ---------------- SEARCH SECTION ----------------
-st.subheader("🔎 Find a movie")
+# ==================================================
+# 5. TMDB POSTER FUNCTION
+# ==================================================
 
-search = st.text_input(
-    "Search",
-    placeholder="Type a movie name, e.g. Toy Story..."
-)
+@st.cache_data(ttl=86400, show_spinner=False)
+def get_movie_poster(movie_title, release_year=None):
 
-all_titles = (
-    df["title"]
-    .dropna()
-    .astype(str)
-    .drop_duplicates()
-    .sort_values()
-    .tolist()
-)
+    api_key = st.secrets.get("TMDB_API_KEY", "")
 
-if search.strip():
-    filtered_titles = [
-        title for title in all_titles
-        if search.strip().lower() in title.lower()
+    if not api_key:
+        return None
+
+    url = "https://api.themoviedb.org/3/search/movie"
+
+    params = {
+        "api_key": api_key,
+        "query": str(movie_title),
+        "include_adult": False
+    }
+
+    if release_year:
+        try:
+            params["year"] = int(release_year)
+        except (ValueError, TypeError):
+            pass
+
+    try:
+        response = requests.get(
+            url,
+            params=params,
+            timeout=8
+        )
+        response.raise_for_status()
+
+        results = response.json().get("results", [])
+
+        normalized_title = str(movie_title).casefold().strip()
+
+        # Prefer an exact title match and a result with a poster.
+        results.sort(
+            key=lambda item: (
+                item.get("title", "").casefold().strip()
+                != normalized_title,
+                not bool(item.get("poster_path"))
+            )
+        )
+
+        for result in results:
+            poster_path = result.get("poster_path")
+
+            if poster_path:
+                return (
+                    "https://image.tmdb.org/t/p/w500"
+                    + poster_path
+                )
+
+    except (
+        requests.RequestException,
+        ValueError,
+        TypeError,
+        KeyError
+    ):
+        return None
+
+    return None
+
+
+# ==================================================
+# 6. HELPER FUNCTIONS
+# ==================================================
+
+def get_release_year(movie):
+
+    if "release_date" in movie.index:
+        release_date = str(movie.get("release_date", ""))
+
+        if (
+            len(release_date) >= 4
+            and release_date[:4].isdigit()
+        ):
+            return release_date[:4]
+
+    if "year" in movie.index:
+        year = str(movie.get("year", ""))
+
+        if len(year) >= 4 and year[:4].isdigit():
+            return year[:4]
+
+    return None
+
+
+def get_movie_overview(movie):
+
+    if "overview" not in movie.index:
+        return "No description available."
+
+    overview = movie.get("overview", "")
+
+    if pd.isna(overview) or not str(overview).strip():
+        return "No description available."
+
+    return str(overview)
+
+
+def truncate_text(text, limit=220):
+
+    text = str(text)
+
+    if len(text) <= limit:
+        return text
+
+    return text[:limit].rsplit(" ", 1)[0] + "..."
+
+
+# ==================================================
+# 7. RECOMMENDATION ENGINE
+# ==================================================
+
+@st.cache_data(show_spinner=False)
+def recommend(movie_title, number_of_recommendations=6):
+
+    titles = (
+        df["title"]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+    )
+
+    normalized_title = movie_title.casefold().strip()
+
+    matching_positions = [
+        position
+        for position, title in enumerate(titles)
+        if title.casefold() == normalized_title
     ]
-else:
-    filtered_titles = all_titles
 
-if not filtered_titles:
-    st.warning("No movies found. Try another title.")
-    st.stop()
-
-selected_movie = st.selectbox(
-    "Choose a movie",
-    filtered_titles,
-    index=0
-)
-
-number_of_movies = st.slider(
-    "Number of recommendations",
-    min_value=3,
-    max_value=10,
-    value=6
-)
-
-# ---------------- RECOMMENDATION LOGIC ----------------
-def recommend(movie_title, n=6):
-    movie_indices = df.index[
-        df["title"].astype(str) == movie_title
-    ].tolist()
-
-    if not movie_indices:
+    if not matching_positions:
         return pd.DataFrame()
 
-    movie_index = movie_indices[0]
+    movie_position = matching_positions[0]
 
-    scores = cosine_similarity(
-        tfidf_matrix[movie_index],
+    # Calculate similarity against all movies.
+    similarity_scores = cosine_similarity(
+        tfidf_matrix[movie_position],
         tfidf_matrix
     ).flatten()
 
-    # Highest similarity first, excluding the selected movie
-    similar_indices = scores.argsort()[::-1]
-    similar_indices = [
-        i for i in similar_indices
-        if i != movie_index
-    ][:n]
+    ranked_positions = similarity_scores.argsort()[::-1]
 
-    result = df.iloc[similar_indices].copy()
-    result["similarity_score"] = scores[similar_indices]
+    # Remove the selected movie and duplicate titles.
+    recommended_positions = []
+    seen_titles = {normalized_title}
 
-    return result
+    for position in ranked_positions:
+
+        if position == movie_position:
+            continue
+
+        title = titles.iloc[position]
+
+        if not title:
+            continue
+
+        normalized_recommendation = title.casefold()
+
+        if normalized_recommendation in seen_titles:
+            continue
+
+        seen_titles.add(normalized_recommendation)
+        recommended_positions.append(position)
+
+        if len(recommended_positions) >= number_of_recommendations:
+            break
+
+    return df.iloc[recommended_positions].copy()
 
 
-# ---------------- DISPLAY MOVIES ----------------
-if st.button("✨ Find Similar Movies", use_container_width=True):
-
-    recommendations = recommend(
-        selected_movie,
-        number_of_movies
-    )
-
-    if recommendations.empty:
-        st.warning("No recommendations could be generated.")
-    else:
-        st.divider()
-
-        st.subheader(f"Because you selected: {selected_movie}")
-        st.caption("Movies selected using content similarity")
-
-        # Selected movie information
-        selected_row = df[
-            df["title"].astype(str) == selected_movie
-        ].iloc[0]
-
-        overview = str(
-            selected_row.get("overview", "")
-        ).strip()
-
-        if overview:
-            st.info(overview)
-
-        # Recommendation cards
-        cols = st.columns(3)
-
-        for i, (_, movie) in enumerate(
-            recommendations.iterrows()
-        ):
-            with cols[i % 3]:
-                title = str(movie.get("title", "Unknown"))
-                genres = str(movie.get("genres", ""))
-                overview = str(movie.get("overview", ""))
-                rating = movie.get("vote_average", 0)
-
-                try:
-                    rating = float(rating)
-                    rating_text = f"{rating:.1f}/10"
-                except (ValueError, TypeError):
-                    rating_text = "Not rated"
-
-                if genres == "nan" or not genres.strip():
-                    genres = "Genre unavailable"
-
-                if overview == "nan":
-                    overview = ""
-
-                if len(overview) > 160:
-                    overview = overview[:160].rsplit(" ", 1)[0] + "..."
-
-                st.markdown(f"""
-                <div class="movie-card">
-                    <div class="tag">RECOMMENDED FOR YOU</div>
-                    <h3>🎞️ {title}</h3>
-                    <p>⭐ Rating: {rating_text}</p>
-                    <p>🎭 {genres}</p>
-                    <p>{overview or "No description available."}</p>
-                </div>
-                """, unsafe_allow_html=True)
-
-        st.success("Enjoy discovering your next movie!")
-
-st.divider()
+# ==================================================
+# 8. LIVE MOVIE SEARCH
+# ==================================================
 
 st.markdown(
-    "<p style='text-align:center;color:#a99aa3;'>"
-    "CineMatch · Discover stories worth watching 🍿"
-    "</p>",
+    '<div class="section-title">Discover your next movie</div>',
     unsafe_allow_html=True
 )
+
+st.markdown(
+    '<div class="section-subtitle">'
+    'Type a movie title, choose a match, and discover similar films.'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+movie_titles = (
+    df["title"]
+    .dropna()
+    .astype(str)
+    .str.strip()
+)
+
+movie_titles = sorted(
+    movie_titles[movie_titles != ""].unique().tolist(),
+    key=str.casefold
+)
+
+if not movie_titles:
+    st.error("No movie titles were found in your dataset.")
+    st.stop()
+
+
+# One text field for searching.
+search_text = st.text_input(
+    "Search movies",
+    placeholder="🔎 Start typing a movie name...",
+    key="movie_search"
+)
+
+
+# ==================================================
+# 9. DISPLAY MATCHES WHILE TYPING
+# ==================================================
+
+if search_text.strip():
+
+    matches = [
+        title
+        for title in movie_titles
+        if search_text.casefold().strip() in title.casefold()
+    ]
+
+    if matches:
+
+        st.caption(
+            f"{len(matches):,} matching movie(s) found. "
+            "Choose a title below."
+        )
+
+        # Limit the dropdown to avoid an excessively long list.
+        matching_options = matches[:50]
+
+        selected_movie = st.selectbox(
+            "Matching movies",
+            options=matching_options,
+            key="movie_match"
+        )
+
+        # Recommendations update automatically when the selection changes.
+        selected_rows = df[
+            df["title"].fillna("").astype(str).str.strip()
+            == selected_movie
+        ]
+
+        if not selected_rows.empty:
+
+            selected_row = selected_rows.iloc[0]
+            selected_year = get_release_year(selected_row)
+
+            st.markdown("---")
+            st.markdown(
+                '<div class="section-title">Your selected movie</div>',
+                unsafe_allow_html=True
+            )
+
+            poster_col, details_col = st.columns([1, 3])
+
+            with poster_col:
+
+                with st.spinner("Loading movie poster..."):
+                    selected_poster = get_movie_poster(
+                        selected_movie,
+                        selected_year
+                    )
+
+                if selected_poster:
+                    st.image(
+                        selected_poster,
+                        use_container_width=True
+                    )
+                else:
+                    st.info("🎞️ Poster unavailable")
+
+            with details_col:
+
+                st.subheader(selected_movie)
+
+                if selected_year:
+                    st.caption(f"📅 Release year: {selected_year}")
+
+                st.write(get_movie_overview(selected_row))
+
+            # ------------------------------------------
+            # 10. AUTOMATIC RECOMMENDATIONS
+            # ------------------------------------------
+
+            st.markdown("---")
+            st.markdown(
+                '<div class="section-title">'
+                '✨ Movies you might like'
+                '</div>',
+                unsafe_allow_html=True
+            )
+
+            st.markdown(
+                '<div class="section-subtitle">'
+                'Recommended based on content similarity.'
+                '</div>',
+                unsafe_allow_html=True
+            )
+
+            number_of_recommendations = st.slider(
+                "Number of recommendations",
+                min_value=3,
+                max_value=12,
+                value=6,
+                key="recommendation_count"
+            )
+
+            with st.spinner("Finding similar movies..."):
+                recommendations = recommend(
+                    selected_movie,
+                    number_of_recommendations
+                )
+
+            if recommendations.empty:
+
+                st.warning(
+                    "No recommendations found for this movie."
+                )
+
+            else:
+
+                columns = st.columns(3)
+
+                for index, (_, movie) in enumerate(
+                    recommendations.iterrows()
+                ):
+
+                    title = str(
+                        movie.get("title", "Unknown title")
+                    )
+
+                    year = get_release_year(movie)
+                    overview = get_movie_overview(movie)
+
+                    with columns[index % 3]:
+
+                        st.markdown(
+                            '<div class="movie-card">',
+                            unsafe_allow_html=True
+                        )
+
+                        with st.spinner(f"Loading {title}..."):
+                            poster_url = get_movie_poster(
+                                title,
+                                year
+                            )
+
+                        if poster_url:
+                            st.image(
+                                poster_url,
+                                use_container_width=True
+                            )
+                        else:
+                            st.info("🎞️ Poster unavailable")
+
+                        # Escape titles before placing them in HTML.
+                        safe_title = escape(title)
+
+                        st.markdown(
+                            f'<div class="movie-title">'
+                            f'{safe_title}</div>',
+                            unsafe_allow_html=True
+                        )
+
+                        if year:
+                            st.markdown(
+                                f'<div class="movie-year">'
+                                f'📅 {escape(str(year))}</div>',
+                                unsafe_allow_html=True
+                            )
+
+                        safe_overview = escape(
+                            truncate_text(overview)
+                        )
+
+                        st.markdown(
+                            f'<div class="movie-overview">'
+                            f'{safe_overview}</div>',
+                            unsafe_allow_html=True
+                        )
+
+                        st.markdown(
+                            '</div>',
+                            unsafe_allow_html=True
+                        )
+
+    else:
+
+        st.info(
+            "No matching movies found. Try another title."
+        )
+
+else:
+
+    st.markdown("""
+    <div class="movie-card">
+        <div class="movie-title">🍿 Ready for movie night?</div>
+        <div class="movie-overview">
+            Start typing a movie title in the search box above.
+            Select a matching movie to see its details and
+            discover similar films instantly.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# ==================================================
+# 11. FOOTER
+# ==================================================
+
+st.markdown("""
+<div class="footer">
+    CineMatch · Find your next favourite film
+    <br><br>
+    Movie metadata and posters powered by TMDB.
+    This product uses the TMDB API but is not endorsed
+    or certified by TMDB.
+</div>
+""", unsafe_allow_html=True)
